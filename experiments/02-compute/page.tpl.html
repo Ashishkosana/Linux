@@ -17,6 +17,8 @@ h1{font:600 24px/1.2 'IBM Plex Sans',sans-serif;margin:0}
 .bar{padding:8px 12px;font:500 12px 'JetBrains Mono',monospace;color:#8fa399;border-bottom:1px solid #1d2a24;display:flex;gap:8px;align-items:center}
 .dot{width:9px;height:9px;border-radius:50%;background:#3a4a42}
 #out{flex:1;overflow:auto;padding:12px;font:13px/1.45 'JetBrains Mono',monospace;white-space:pre;overflow-x:auto}
+.ex{white-space:normal;font:13px/1.55 'IBM Plex Sans',system-ui,sans-serif;color:#b9cdc2;border-left:3px solid var(--prompt);background:#0c1511;padding:8px 12px;margin:6px 0 12px;max-width:68ch}
+.ex strong{color:#fff;font-weight:600}.ex b{color:#8fe0b8;font-weight:600}.ex code{font:12px 'JetBrains Mono',monospace;color:#f0c27b}
 .p{color:var(--prompt)}.cmd{color:#fff}.err{color:#f08a4b}
 form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #1d2a24;font:13px 'JetBrains Mono',monospace}
 form label{color:var(--prompt);white-space:nowrap}
@@ -41,7 +43,7 @@ form label{color:var(--prompt);white-space:nowrap}
 <main>
   <header>
     <h1>Compute Terminal</h1>
-    <p class="lead">Type the same commands you would in a local terminal. Output is real, captured from this Linux machine, and the panel on the right draws it. Try <code>stress</code> to watch the four cores take load.</p>
+    <p class="lead">Type the same commands you would in a local terminal. Output is real, captured from this Linux machine. Each command is followed by a plain explanation of what it does and how to read it, and the panel on the right draws it. Try <code>stress</code> to watch the four cores take load.</p>
   </header>
   <div class="grid">
     <section class="term" aria-label="Terminal">
@@ -76,10 +78,26 @@ var OUT={
 'ps aux --sort=-%cpu':'USER       PID %CPU %MEM    VSZ   RSS COMMAND\nroot        95 10.5  1.6 5633480 276144 /opt/claude-code/bin/claude --preload ...\nroot         1  1.9  0.0  25128  5928 /process_api --firecracker-init ...\nroot        85  0.9  0.2 2031412 39644 /usr/local/bin/environment-manager task-run ...\nroot        31  0.6  0.0      0     0 [migration/3]\nroot        21  0.5  0.0      0     0 [migration/1]',
 'top':'top - 21:36:55 up 0 min,  0 user,  load average: 0.00, 0.00, 0.00\nTasks:  77 total,   1 running,  76 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :  16093.2 total,  15645.6 free,    432.5 used,    229.6 buff/cache\nMiB Swap:      0.0 total,      0.0 free,      0.0 used.  15660.7 avail Mem\n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM COMMAND\n    1 root      20   0   25128   5928   5476 S   0.0   0.0 process_a+\n    2 root      20   0       0      0      0 S   0.0   0.0 kthreadd'
 };
+var EXPL={
+'stress':['Generates load on purpose so you can see the CPU react.','Starts one busy loop per core (<code>while 1: pass</code>), pinned with <code>taskset -c N</code>, then reads /proc/stat every 0.5 s. A core with a loop pinned to it shows 100%. Idle cores stay near 0%. This is what <code>top</code> and <code>htop</code> compute under the hood: the change in busy ticks divided by the change in total ticks.'],
+'lscpu':['Describes the CPU hardware.','Read it for: <b>CPU(s)</b> = logical processors the kernel can schedule on. <b>Thread(s) per core 1</b> = no hyper-threading. <b>Hypervisor KVM</b> = this is a virtual machine, so these are virtual CPUs. <b>L1/L2/L3</b> = cache sizes, each smaller and faster than the one after. <b>Flags</b> = instruction sets the CPU supports (avx512, aes), which programs use to run faster.'],
+'free -h':['Shows RAM and swap, in human-readable units (-h).','<b>used</b> is memory programs hold. <b>buff/cache</b> is file data the kernel keeps in RAM and gives back when needed. <b>available</b> is the real answer to "how much can a new program get", because it counts reclaimable cache. A small <b>free</b> with a large <b>available</b> is normal and healthy. <b>Swap 0B</b> = no disk overflow, so running out means the OOM killer.'],
+'top':['A live, sorted view of what the machine is doing (here one snapshot).','Header: <b>load average</b> = average number of tasks running or waiting, over 1, 5 and 15 minutes. Compare it to your core count (4). <b>%Cpu(s)</b> splits time into us (user code), sy (kernel), id (idle), wa (waiting on disk). Rows: <b>RES</b> = RAM in use, <b>S</b> = state (S sleeping, R running, I idle kernel thread), <b>NI</b> = nice value.'],
+'vmstat 1 3':['Prints system activity every 1 second, 3 times.','<b>r</b> = tasks waiting for a CPU (persistently above the core count means CPU-bound). <b>b</b> = tasks blocked on I/O. <b>si/so</b> = swap in/out. <b>bi/bo</b> = disk blocks read/written. <b>in/cs</b> = interrupts and context switches per second. <b>us sy id wa st</b> = CPU time split. The first row is an average since boot, so read the later rows.'],
+'uptime':['Time since boot and the load averages, in one line.','The three numbers are the 1, 5 and 15 minute load averages. On 4 cores, a load of 4.00 means every core is busy. Above 4.00 means tasks are queueing for a CPU.'],
+'nproc':['Prints the number of processing units available to this process.','It respects CPU limits, so inside a container or after <code>taskset</code> it can print less than the machine has. Handy for <code>make -j$(nproc)</code>.'],
+'ps aux --sort=-%cpu':['Lists every process, highest CPU use first.','<b>a</b> = all users, <b>u</b> = user-oriented columns, <b>x</b> = include processes without a terminal. <b>VSZ</b> = virtual memory the process mapped, <b>RSS</b> = physical RAM it actually holds. Names in [brackets] are kernel threads. %CPU here is lifetime average, not current, unlike top.'],
+'df -h /':['Shows how full the filesystem mounted at / is.','<b>Size / Used / Avail</b> are blocks on the device. Used + Avail can be less than Size because ext4 reserves some space for root. Use <code>du</code> to find what is using the space. <code>df -i</code> shows inode exhaustion, the other way a disk fills up.'],
+'lsblk':['Lists block devices (disks) as a tree.','<b>vda</b> is a virtual disk. <b>MAJ:MIN</b> are the kernel device numbers. <b>RO 1</b> = read-only (the small vdb–vdf images). <b>MOUNTPOINTS</b> shows where each is attached. <b>zram0</b> is a compressed-RAM device, size 0B means unused.'],
+'cat /proc/meminfo':['The raw source that free and top read from.','/proc is not a real disk. It is the kernel exposing its own counters as files, so <code>cat</code> reads live kernel state. Values are in kB. <b>MemAvailable</b> is the kernel estimate free reports as "available". <b>Active/Inactive</b> track which cached pages were used recently, which decides what gets evicted first.'],
+'uname -a':['Prints the kernel and machine identity.','Fields in order: kernel name, hostname (<b>vm</b>), kernel release (<b>6.18.44</b>), build info (SMP = multi-processor, PREEMPT_DYNAMIC = preemption mode chosen at boot), and architecture (<b>x86_64</b>).'],
+'cat /proc/loadavg':['Raw load numbers from the kernel.','Fields: 1, 5, 15 minute load, then <b>running/total</b> scheduling entities (1/107), then the last PID created. uptime and top read this file.']
+};
 var ORDER=['stress','lscpu','free -h','top','vmstat 1 3','uptime','nproc','ps aux --sort=-%cpu','df -h /','lsblk','cat /proc/meminfo','uname -a'];
 var out=document.getElementById('out'),inp=document.getElementById('in'),hist=[],hi=-1,samples=[];
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 function print(h){out.insertAdjacentHTML('beforeend',h+'\n');out.scrollTop=out.scrollHeight}
+function explain(k){var e=EXPL[k];if(e)out.insertAdjacentHTML('beforeend','<div class="ex"><strong>'+e[0]+'</strong><br>'+e[1]+'</div>');out.scrollTop=out.scrollHeight}
 function cores(a){document.getElementById('cores').innerHTML=a.map(function(v,i){
   var c=v>60?'var(--hot)':'var(--cool)';
   return '<div class="core"><span>cpu'+i+'</span><div class="track"><div class="fill" style="width:'+v+'%;background:'+c+'"></div></div><b>'+v+'%</b></div>'}).join('')}
@@ -96,9 +114,9 @@ function stress(){busy=true;print('<span class="p">stress:</span> 0 → 1 → 2 
 function run(c){c=c.trim();if(!c)return;print('<span class="p">root@vm:~#</span> <span class="cmd">'+esc(c)+'</span>');hist.unshift(c);hi=-1;
   if(c==='clear'){out.innerHTML='';return}
   if(c==='help'){print('Available:\n  '+ORDER.join('\n  ')+'\n  clear');return}
-  if(c==='stress'){if(!busy)stress();return}
+  if(c==='stress'){explain('stress');if(!busy)stress();return}
   var k=c.replace(/\s+/g,' ');if(k==='ps aux')k='ps aux --sort=-%cpu';if(k==='free')k='free -h';if(k==='df')k='df -h /';if(k==='df -h')k='df -h /';if(k==='vmstat')k='vmstat 1 3';
-  if(OUT[k]){print(esc(OUT[k]));if(k==='lscpu'||k==='nproc')cores([0,0,0,0])}
+  if(OUT[k]){print(esc(OUT[k]));explain(k);if(k==='lscpu'||k==='nproc')cores([0,0,0,0])}
   else print('<span class="err">'+esc(c.split(' ')[0])+': command not found (type help)</span>')}
 document.getElementById('f').onsubmit=function(e){e.preventDefault();run(inp.value);inp.value=''};
 inp.onkeydown=function(e){if(e.key==='ArrowUp'&&hist.length){hi=Math.min(hi+1,hist.length-1);inp.value=hist[hi];e.preventDefault()}
