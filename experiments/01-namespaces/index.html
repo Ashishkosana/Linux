@@ -1,0 +1,133 @@
+<title>Namespace Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column, host and container panes side by side, toggled per namespace */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --fg:#14201b; --muted:#5a6b63; --line:#d5ddd9;
+  --host:#2563a8; --box:#c2410c; --same:#8a9890; --ok:#1f7a4d;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1512; --panel:#16201b; --fg:#e4ede8; --muted:#8fa399; --line:#2a3832;
+  --host:#6aa6ec; --box:#f08a4b; --same:#6b7c73; --ok:#4cc38a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1512; --panel:#16201b; --fg:#e4ede8; --muted:#8fa399; --line:#2a3832;
+  --host:#6aa6ec; --box:#f08a4b; --same:#6b7c73; --ok:#4cc38a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);margin:0;
+  padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font:600 28px/1.2 var(--sans);margin:0;text-wrap:balance}
+h2{font:600 13px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+p{margin:0;max-width:65ch;color:var(--muted)}
+code,.mono{font-family:var(--mono);font-size:13px}
+.cmd{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;white-space:pre;color:var(--fg)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 13px var(--mono);border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--box);color:var(--box);background:color-mix(in srgb,var(--box) 10%,var(--panel))}
+.chip:focus-visible{outline:2px solid var(--host);outline-offset:2px}
+.panes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.pane.host{border-top:3px solid var(--host)}.pane.box{border-top:3px solid var(--box)}
+.tag{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.host .tag{color:var(--host)}.box .tag{color:var(--box)}
+.big{font:600 34px/1.1 var(--mono);margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.sub{color:var(--muted);font-size:13px}
+.verdict{font:500 13px var(--mono);margin-top:12px;padding:8px 10px;border-radius:6px;background:color-mix(in srgb,var(--ok) 12%,var(--panel));color:var(--ok)}
+.verdict.same{background:color-mix(in srgb,var(--same) 14%,var(--panel));color:var(--muted)}
+table{width:100%;border-collapse:collapse;font:13px var(--mono)}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500}
+.tw{overflow-x:auto}
+.tree{font:13px/1.7 var(--mono);white-space:pre;overflow-x:auto}
+.diff{color:var(--box);font-weight:600}.eq{color:var(--same)}
+.bar{display:flex;align-items:center;gap:10px;font:12px var(--mono);margin:6px 0}
+.bar i{display:block;height:12px;border-radius:2px;min-width:3px}
+.bar span{min-width:0}
+.takeaway{border-left:3px solid var(--ok);padding:2px 0 2px 14px;color:var(--fg);max-width:70ch}
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <div class="mono" style="color:var(--muted)">Experiment 01 · measured on Linux 6.18.44, root, 4 CPUs</div>
+    <h1>What does a "container" actually change?</h1>
+    <p>One command starts a shell in fresh namespaces. Nothing is copied or virtualised. The kernel simply shows that shell a different view of the same machine. Select a namespace to compare what the host sees with what the shell sees.</p>
+  </header>
+
+  <section>
+    <h2>The command</h2>
+    <div class="cmd">unshare --pid --fork --mount-proc --uts --net --ipc --mount sh</div>
+  </section>
+
+  <section>
+    <h2>Pick a namespace</h2>
+    <div class="chips" id="chips" role="group" aria-label="Namespace"></div>
+  </section>
+
+  <section class="panes" id="panes" aria-live="polite"></section>
+
+  <section>
+    <h2>All ten namespace handles, from /proc/self/ns</h2>
+    <div class="tw"><table id="ns"></table></div>
+    <p style="margin-top:10px">Each handle is an inode number. Equal numbers mean the shell shares that view with the host. Different numbers mean it has its own. Cgroup, time and user were not requested, so those three stay shared.</p>
+  </section>
+
+  <section>
+    <h2>Process table size</h2>
+    <div id="bars"></div>
+  </section>
+
+  <p class="takeaway">A container is an ordinary process with some of its namespaces swapped out. The shell is PID 1 in its own world, but the host kernel still schedules it as PID 193's child.</p>
+</main>
+
+<script>
+// Captured from experiments/01-namespaces/run.sh on this machine.
+var NS=[
+ ['cgroup',4026531835,4026531835],['ipc',4026531839,4026532266],['mnt',4026531832,4026532264],
+ ['net',4026531833,4026532268],['pid',4026531836,4026532267],['pid_for_children',4026531836,4026532267],
+ ['time',4026531834,4026531834],['time_for_children',4026531834,4026531834],
+ ['user',4026531837,4026531837],['uts',4026531838,4026532265]];
+var VIEWS={
+ pid:{label:'pid',hostBig:'80',hostSub:'processes visible, PID 1 is process_api',
+      boxBig:'2',boxSub:'processes visible, PID 1 is sh',
+      hostBody:'1 process_api\n 2 kthreadd\n 3 pool_workqueue_release\n 4 kworker/R-rcu_gp\n … 76 more',
+      boxBody:'1 sh      (PPID 0)\n6 ps      (PPID 1)',
+      note:'The shell believes it is init. The host sees it as an ordinary child with PID 193 as ancestor.'},
+ uts:{label:'uts',hostBig:'vm',hostSub:'hostname',boxBig:'lab-container',boxSub:'hostname',
+      hostBody:'$ hostname\nvm',boxBody:'$ hostname lab-container\n$ hostname\nlab-container',
+      note:'Setting the hostname inside changed nothing on the host.'},
+ net:{label:'net',hostBig:'4',hostSub:'interfaces',boxBig:'1',boxSub:'interface',
+      hostBody:'lo\nifb0\nifb1\neth0',boxBody:'lo   (down, no addresses)',
+      note:'A new network namespace starts with only a loopback device. No route to anywhere until you add a veth pair.'},
+ mnt:{label:'mnt',hostBig:'shared',hostSub:'mount table',boxBig:'private',boxSub:'mount table copy',
+      hostBody:'/proc  (host pid view)',boxBody:'/proc  (remounted, shows 2 processes)',
+      note:'This is why --mount-proc matters. Without a fresh /proc mount, ps would still list host processes.'},
+ ipc:{label:'ipc',hostBig:'shared',hostSub:'SysV queues, shm',boxBig:'private',boxSub:'empty IPC tables',
+      hostBody:'message queues, shared memory,\nsemaphores of host',boxBody:'none',
+      note:'Shared memory segments created inside are invisible outside.'}
+};
+var cur='pid';
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function render(){
+  var v=VIEWS[cur],ns=NS.filter(function(r){return r[0]===cur})[0];
+  var same=ns[1]===ns[2];
+  document.getElementById('panes').innerHTML=
+   '<div class="pane host"><div class="tag">Host</div><div class="big">'+v.hostBig+'</div><div class="sub">'+v.hostSub+'</div><div class="tree" style="margin-top:12px">'+esc(v.hostBody)+'</div></div>'+
+   '<div class="pane box"><div class="tag">Inside unshare</div><div class="big">'+v.boxBig+'</div><div class="sub">'+v.boxSub+'</div><div class="tree" style="margin-top:12px">'+esc(v.boxBody)+'</div>'+
+   '<div class="verdict'+(same?' same':'')+'">'+cur+':['+ns[1]+'] → ['+ns[2]+']  '+(same?'shared':'isolated')+'</div></div>'+
+   '<div class="pane" style="grid-column:1/-1"><div class="sub">'+v.note+'</div></div>';
+  Array.prototype.forEach.call(document.querySelectorAll('.chip'),function(c){c.setAttribute('aria-pressed',c.dataset.k===cur)});
+}
+var chips=document.getElementById('chips');
+Object.keys(VIEWS).forEach(function(k){
+  var b=document.createElement('button');b.className='chip';b.dataset.k=k;b.textContent=k;
+  b.onclick=function(){cur=k;render()};chips.appendChild(b)});
+document.getElementById('ns').innerHTML='<tr><th>namespace</th><th>host</th><th>inside</th><th></th></tr>'+
+ NS.map(function(r){var s=r[1]===r[2];
+  return '<tr><td>'+r[0]+'</td><td class="'+(s?'eq':'')+'">'+r[1]+'</td><td class="'+(s?'eq':'diff')+'">'+r[2]+'</td><td class="'+(s?'eq':'diff')+'">'+(s?'shared':'isolated')+'</td></tr>'}).join('');
+document.getElementById('bars').innerHTML=
+ '<div class="bar"><span style="width:56px">host</span><i style="width:'+(80*7)+'px;max-width:70%;background:var(--host)"></i><span>80</span></div>'+
+ '<div class="bar"><span style="width:56px">inside</span><i style="width:'+(2*7)+'px;background:var(--box)"></i><span>2</span></div>';
+render();
+</script>
