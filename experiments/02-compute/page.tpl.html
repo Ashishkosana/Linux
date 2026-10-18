@@ -1,0 +1,110 @@
+<title>Compute Terminal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@500;600&display=swap">
+<style>
+/* Layout: terminal on the left, live compute panel (cores, memory) on the right; stacks on phones */
+:root{--bg:#eef1ef;--panel:#fff;--fg:#14201b;--muted:#5d6e66;--line:#d3dbd7;--term:#0f1613;--termfg:#d6e4dc;--prompt:#4cc38a;--hot:#d9480f;--cool:#2563a8;--mem:#7c5cc4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b100e;--panel:#141d19;--fg:#e4ede8;--muted:#8fa399;--line:#27342e;--term:#070b09;--hot:#f08a4b;--cool:#6aa6ec;--mem:#a58be8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0b100e;--panel:#141d19;--fg:#e4ede8;--muted:#8fa399;--line:#27342e;--term:#070b09;--hot:#f08a4b;--cool:#6aa6ec;--mem:#a58be8;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 'IBM Plex Sans',system-ui,sans-serif;margin:0;padding-block:24px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font:600 24px/1.2 'IBM Plex Sans',sans-serif;margin:0}
+.lead{color:var(--muted);max-width:68ch;margin:4px 0 0}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:16px}
+@media(max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.term{background:var(--term);color:var(--termfg);border-radius:8px;display:flex;flex-direction:column;min-width:0;height:520px;border:1px solid var(--line)}
+.bar{padding:8px 12px;font:500 12px 'JetBrains Mono',monospace;color:#8fa399;border-bottom:1px solid #1d2a24;display:flex;gap:8px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:#3a4a42}
+#out{flex:1;overflow:auto;padding:12px;font:13px/1.45 'JetBrains Mono',monospace;white-space:pre;overflow-x:auto}
+.p{color:var(--prompt)}.cmd{color:#fff}.err{color:#f08a4b}
+form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #1d2a24;font:13px 'JetBrains Mono',monospace}
+form label{color:var(--prompt);white-space:nowrap}
+#in{flex:1;min-width:0;background:transparent;border:0;color:#fff;font:inherit;outline:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 12px 'JetBrains Mono',monospace;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:5px 10px;cursor:pointer}
+.chip:focus-visible,#in:focus-visible{outline:2px solid var(--cool);outline-offset:2px}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.card h2{font:600 11px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.core{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:center;font:12px 'JetBrains Mono',monospace;margin:7px 0}
+.track{height:14px;background:var(--bg);border-radius:3px;overflow:hidden}
+.fill{height:100%;width:0;background:var(--cool);transition:width .35s,background .35s}
+.core b{text-align:right;font-weight:500;font-variant-numeric:tabular-nums}
+.big{font:700 28px/1 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+.sub{color:var(--muted);font-size:12px}
+.stk{display:flex;height:16px;border-radius:3px;overflow:hidden;background:var(--bg)}
+.hist{display:flex;align-items:flex-end;gap:2px;height:46px}
+.hist i{flex:1;background:var(--cool);min-height:2px;border-radius:1px}
+.note{color:var(--muted);font-size:12px;max-width:80ch}
+</style>
+<main>
+  <header>
+    <h1>Compute Terminal</h1>
+    <p class="lead">Type the same commands you would in a local terminal. Output is real, captured from this Linux machine, and the panel on the right draws it. Try <code>stress</code> to watch the four cores take load.</p>
+  </header>
+  <div class="grid">
+    <section class="term" aria-label="Terminal">
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>&nbsp;root@vm: ~</div>
+      <div id="out" role="log" aria-live="polite"></div>
+      <form id="f"><label for="in">root@vm:~#</label><input id="in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form>
+    </section>
+    <aside class="side">
+      <div class="card"><h2>CPU · 4 cores · Xeon 2.10 GHz</h2><div id="cores"></div>
+        <div class="sub" style="margin-top:8px">load average (1 min)</div><div class="big" id="load">0.00</div></div>
+      <div class="card"><h2>Memory · 15.7 GiB</h2><div class="stk" id="mem"></div>
+        <div class="sub" id="memt" style="margin-top:6px"></div></div>
+      <div class="card"><h2>Total CPU, last 30 samples</h2><div class="hist" id="hist"></div></div>
+    </aside>
+  </div>
+  <div class="chips" id="chips" aria-label="Command shortcuts"></div>
+  <p class="note">This page cannot reach the machine live, so it replays captured output for the commands listed under <code>help</code>. Anything else answers "command not found", the same as a missing tool would. The <code>stress</code> run was measured by pinning one busy loop per core and reading /proc/stat every 0.5 s; see sample.py in the repo.</p>
+</main>
+<script>
+var FRAMES=__FRAMES__;
+var OUT={
+'uname -a':'Linux vm 6.18.44-fc-v139 #1 SMP PREEMPT_DYNAMIC @0 x86_64 x86_64 x86_64 GNU/Linux',
+'nproc':'4',
+'uptime':' 21:36:53 up 0 min,  0 user,  load average: 0.00, 0.00, 0.00',
+'free -h':'               total        used        free      shared  buff/cache   available\nMem:            15Gi       431Mi        15Gi        14Mi       226Mi        15Gi\nSwap:             0B          0B          0B',
+'lscpu':'Architecture:        x86_64\nCPU op-mode(s):      32-bit, 64-bit\nCPU(s):              4\nVendor ID:           GenuineIntel\nModel name:          Intel(R) Xeon(R) Processor @ 2.10GHz\nThread(s) per core:  1\nCore(s) per socket:  4\nSocket(s):           1\nBogoMIPS:            4200.00\nHypervisor vendor:   KVM\nVirtualization type: full\nL1d cache:           192 KiB (4 instances)\nL1i cache:           128 KiB (4 instances)\nL2 cache:            8 MiB (4 instances)\nL3 cache:            260 MiB (1 instance)\nNUMA node0 CPU(s):   0-3\nFlags:               fpu vme sse4_2 avx avx2 avx512f avx512bw aes ... (trimmed)',
+'df -h /':'Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda        252G  9.0G   31G  23% /',
+'vmstat 1 3':'procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu\n 1  0      0 16023732   7624 224808    0    0  6186    23  719    2  2  2 96  0  0  0\n 0  0      0 16023620   7624 225616    0    0     0     0  206  132  0  0 100  0  0  0\n 0  0      0 16023852   7624 225616    0    0     0     0  282  362  1  0 99  0  0  0',
+'cat /proc/loadavg':'0.00 0.00 0.00 1/107 215',
+'cat /proc/meminfo':'MemTotal:       16479424 kB\nMemFree:        16022920 kB\nMemAvailable:   16037264 kB\nBuffers:            7624 kB\nCached:           221016 kB\nSwapCached:            0 kB\nActive:            24536 kB\nInactive:         359508 kB',
+'lsblk':'NAME  MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS\nvda   254:0    0   256G  0 disk /\nvdb   254:16   0   9.6M  1 disk /opt/rclone\nvdc   254:32   0 302.2M  1 disk /opt/claude-code\nvdd   254:48   0  47.8M  1 disk /opt/env-runner',
+'ps aux --sort=-%cpu':'USER       PID %CPU %MEM    VSZ   RSS COMMAND\nroot        95 10.5  1.6 5633480 276144 /opt/claude-code/bin/claude --preload ...\nroot         1  1.9  0.0  25128  5928 /process_api --firecracker-init ...\nroot        85  0.9  0.2 2031412 39644 /usr/local/bin/environment-manager task-run ...\nroot        31  0.6  0.0      0     0 [migration/3]\nroot        21  0.5  0.0      0     0 [migration/1]',
+'top':'top - 21:36:55 up 0 min,  0 user,  load average: 0.00, 0.00, 0.00\nTasks:  77 total,   1 running,  76 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :  16093.2 total,  15645.6 free,    432.5 used,    229.6 buff/cache\nMiB Swap:      0.0 total,      0.0 free,      0.0 used.  15660.7 avail Mem\n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM COMMAND\n    1 root      20   0   25128   5928   5476 S   0.0   0.0 process_a+\n    2 root      20   0       0      0      0 S   0.0   0.0 kthreadd'
+};
+var ORDER=['stress','lscpu','free -h','top','vmstat 1 3','uptime','nproc','ps aux --sort=-%cpu','df -h /','lsblk','cat /proc/meminfo','uname -a'];
+var out=document.getElementById('out'),inp=document.getElementById('in'),hist=[],hi=-1,samples=[];
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function print(h){out.insertAdjacentHTML('beforeend',h+'\n');out.scrollTop=out.scrollHeight}
+function cores(a){document.getElementById('cores').innerHTML=a.map(function(v,i){
+  var c=v>60?'var(--hot)':'var(--cool)';
+  return '<div class="core"><span>cpu'+i+'</span><div class="track"><div class="fill" style="width:'+v+'%;background:'+c+'"></div></div><b>'+v+'%</b></div>'}).join('')}
+function total(a){samples.push(a.reduce(function(s,x){return s+x},0)/a.length);samples=samples.slice(-30);
+  document.getElementById('hist').innerHTML=samples.map(function(v){return '<i style="height:'+Math.max(2,v*0.46)+'px"></i>'}).join('')}
+function mem(){var u=431,b=226,f=15686-u-b;var t=u+b+f;
+  document.getElementById('mem').innerHTML=[[u,'var(--mem)'],[b,'var(--cool)']].map(function(p){return '<div style="width:'+p[0]/t*100+'%;background:'+p[1]+'"></div>'}).join('');
+  document.getElementById('memt').textContent='used 431 MiB · cache 226 MiB · free 15.0 GiB · no swap'}
+var busy=false;
+function stress(){busy=true;print('<span class="p">stress:</span> 0 → 1 → 2 → 4 → 0 busy loops, one per core, 3 s each (replaying 30 samples at 0.5 s)');
+  var i=0,t=setInterval(function(){var f=FRAMES[i++];if(!f){clearInterval(t);busy=false;print('done. peak load: all four cores at 100%');return}
+    cores(f.cores);total(f.cores);document.getElementById('load').textContent=f.load;
+    if(i%6==1)print('  t='+f.t.toFixed(1)+'s  busy loops: '+f.busy+'   cores: '+f.cores.join('% ')+'%')},500)}
+function run(c){c=c.trim();if(!c)return;print('<span class="p">root@vm:~#</span> <span class="cmd">'+esc(c)+'</span>');hist.unshift(c);hi=-1;
+  if(c==='clear'){out.innerHTML='';return}
+  if(c==='help'){print('Available:\n  '+ORDER.join('\n  ')+'\n  clear');return}
+  if(c==='stress'){if(!busy)stress();return}
+  var k=c.replace(/\s+/g,' ');if(k==='ps aux')k='ps aux --sort=-%cpu';if(k==='free')k='free -h';if(k==='df')k='df -h /';if(k==='df -h')k='df -h /';if(k==='vmstat')k='vmstat 1 3';
+  if(OUT[k]){print(esc(OUT[k]));if(k==='lscpu'||k==='nproc')cores([0,0,0,0])}
+  else print('<span class="err">'+esc(c.split(' ')[0])+': command not found (type help)</span>')}
+document.getElementById('f').onsubmit=function(e){e.preventDefault();run(inp.value);inp.value=''};
+inp.onkeydown=function(e){if(e.key==='ArrowUp'&&hist.length){hi=Math.min(hi+1,hist.length-1);inp.value=hist[hi];e.preventDefault()}
+  if(e.key==='ArrowDown'){hi=Math.max(hi-1,-1);inp.value=hi<0?'':hist[hi];e.preventDefault()}};
+var ch=document.getElementById('chips');ORDER.forEach(function(c){var b=document.createElement('button');b.className='chip';b.textContent=c;b.onclick=function(){run(c);inp.focus()};ch.appendChild(b)});
+cores([0,0,0,0]);mem();total([0,0,0,0]);
+print('Welcome. Type <span class="cmd">help</span>, or press a shortcut below. Up/Down arrows recall history.');
+run('lscpu');
+</script>
